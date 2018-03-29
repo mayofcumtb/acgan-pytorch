@@ -116,7 +116,7 @@ if opt.netD != '':
     netD.load_state_dict(torch.load(opt.netD))
 print(netD)
 
-s_criterion = nn.BCELoss()
+s_criterion = nn.BCELoss()# which source is real or synthesis
 c_criterion = nn.NLLLoss()
 #TODO: last thing compare
 """
@@ -169,7 +169,10 @@ def test(predict, labels):
     return correct, len(labels.data)
 
 def add_background_to_syn_image(back, syn_image, alpha):
-    pass
+    import pdb; pdb.set_trace()
+    for i in range(len(back)):
+        back[i]
+
 
 for epoch in range(opt.niter):
     for i, data in enumerate(dataloader, 0):
@@ -209,6 +212,7 @@ for epoch in range(opt.niter):
         c_label.data.resize_(batch_size).copy_(torch.from_numpy(label))
 
         fake = netG(noise)
+        add_background_to_syn_image(fake, syn_image, syn_alpha)
         """
         need to add a function to pass the background and syn_obj with alpha
         """
