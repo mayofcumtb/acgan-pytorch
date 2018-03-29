@@ -2,6 +2,7 @@
 Pytorch implementation of Conditional Image Synthesis with Auxiliary Classifier GANs (https://arxiv.org/pdf/1610.09585.pdf).
 This code is based on Deep Convolutional Generative Adversarial Networks in Pytorch examples : https://github.com/pytorch/examples/tree/master/dcgan
 """""""""
+# -*- coding: utf-8 -*-
 from __future__ import print_function
 import argparse
 import os
@@ -19,25 +20,27 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
 from torch.autograd import Variable
+from syn_data.syn_dataset import SynImageDatasets
+from torchvision.
 
 import model
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', required=True, help='cifar10 | mnist')
-parser.add_argument('--dataroot', required=True, help='path to dataset')
-parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
+parser.add_argument('--dataset', required=True, help='cifar10 | mnist') # 数据集名称
+parser.add_argument('--dataroot', required=True, help='path to dataset') # 数据集路径
+parser.add_argument('--workers', type=int, help='number of data loading workers', default=2) # 启用多线程进行数据读取
 parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
 parser.add_argument('--imageSize', type=int, default=64, help='the height / width of the input image to network')
-parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector')
-parser.add_argument('--ngf', type=int, default=64)
-parser.add_argument('--ndf', type=int, default=64)
-parser.add_argument('--niter', type=int, default=25, help='number of epochs to train for')
+parser.add_argument('--nz', type=int, default=100, help='size of the latent z vector') # 随机向量维度
+parser.add_argument('--ngf', type=int, default=64) # number of generator filers
+parser.add_argument('--ndf', type=int, default=64) # number of discriminater filters
+parser.add_argument('--niter', type=int, default=25, help='number of epochs to train for') # 遍历几遍代码
 parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
-parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
-parser.add_argument('--cuda', action='store_true', help='enables cuda')
-parser.add_argument('--netG', default='', help="path to netG (to continue training)")
-parser.add_argument('--netD', default='', help="path to netD (to continue training)")
-parser.add_argument('--outf', default='.', help='folder to output images and model checkpoints')
+parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')# adam 优化器的参数
+parser.add_argument('--cuda', action='store_true', help='enables cuda') # 是否使用gpu进行加速训练
+parser.add_argument('--netG', default='', help="path to netG (to continue training)") # netG的模型参数保存位置
+parser.add_argument('--netD', default='', help="path to netD (to continue training)") # netD的模型参数保存位置
+parser.add_argument('--outf', default='.', help='folder to output images and model checkpoints') #模型的参数保存位置
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 
 opt = parser.parse_args()
@@ -79,11 +82,12 @@ elif opt.dataset == 'mnist':
                            ])
     )
 
-
+elif opt.dataset == 'syn':
+    dataset= SynImageDatasets(root=opt.dataroot, transform=transforms.Scale(opt.imageSize))
 assert dataset
+
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
                                          shuffle=True, num_workers=int(opt.workers))
-
 
 nz = int(opt.nz)
 ngf = int(opt.ngf)
@@ -91,24 +95,33 @@ ndf = int(opt.ndf)
 if opt.dataset == 'mnist':
     nc = 1
     nb_label = 10
-else:
+elif opt.dataset == 'cifar10':
     nc = 3
     nb_label = 10
+else:
+    nc = 3
+    nb_label = 12
 
 netG = model.netG(nz, ngf, nc)
 
 if opt.netG != '':
+    print ("load generator net params from %s"%opt.netG)
     netG.load_state_dict(torch.load(opt.netG))
 print(netG)
 
 netD = model.netD(ndf, nc, nb_label)
 
 if opt.netD != '':
+    print ("load discriminator net params from %s"%opt.netD)
     netD.load_state_dict(torch.load(opt.netD))
 print(netD)
 
-s_criterion = nn.BCELoss()
+s_criterion = nn.BCELoss()# which source is real or synthesis
 c_criterion = nn.NLLLoss()
+#TODO: last thing compare
+"""
+add patch discrimnator loss
+"""
 
 input = torch.FloatTensor(opt.batchSize, 3, opt.imageSize, opt.imageSize)
 noise = torch.FloatTensor(opt.batchSize, nz, 1, 1)
@@ -141,7 +154,7 @@ random_onehot[np.arange(opt.batchSize), random_label] = 1
 fixed_noise_[np.arange(opt.batchSize), :nb_label] = random_onehot[np.arange(opt.batchSize)]
 
 
-fixed_noise_ = (torch.from_numpy(fixed_noise_))
+fixed_noise_ = (torch.from_numpy(fixed_noise_).clone())
 fixed_noise_ = fixed_noise_.resize_(opt.batchSize, nz, 1, 1)
 fixed_noise.data.copy_(fixed_noise_)
 
@@ -155,6 +168,12 @@ def test(predict, labels):
     correct = pred.eq(labels.data).cpu().sum()
     return correct, len(labels.data)
 
+def add_background_to_syn_image(back, syn_image, alpha):
+    import pdb; pdb.set_trace()
+    for i in range(len(back)):
+        back[i]
+
+
 for epoch in range(opt.niter):
     for i, data in enumerate(dataloader, 0):
         ###########################
@@ -162,11 +181,11 @@ for epoch in range(opt.niter):
         ###########################
         # train with real
         netD.zero_grad()
-        img, label = data
-        batch_size = img.size(0)
-        input.data.resize_(img.size()).copy_(img)
+        syn_image, real_image, syn_alpha, syn_class_index, real_class_index, azimuth, elevation, tilt, distance = data
+        batch_size = real_image.size(0)
+        input.data.resize_(real_image.size()).copy_(real_image)
         s_label.data.resize_(batch_size).fill_(real_label)
-        c_label.data.resize_(batch_size).copy_(label)
+        c_label.data.resize_(batch_size).copy_(real_class_index)
         s_output, c_output = netD(input)
         s_errD_real = s_criterion(s_output, s_label)
         c_errD_real = c_criterion(c_output, c_label)
@@ -180,19 +199,23 @@ for epoch in range(opt.niter):
         noise.data.resize_(batch_size, nz, 1, 1)
         noise.data.normal_(0, 1)
 
-        label = np.random.randint(0, nb_label, batch_size)
+        label = syn_class_index
         noise_ = np.random.normal(0, 1, (batch_size, nz))
         label_onehot = np.zeros((batch_size, nb_label))
-        label_onehot[np.arange(batch_size), label] = 1
+        label_onehot[np.arange(batch_size), label, azimuth, elevation, tilt, distance] = 1
         noise_[np.arange(batch_size), :nb_label] = label_onehot[np.arange(batch_size)]
         
-        noise_ = (torch.from_numpy(noise_))
+        noise_ = (torch.from_numpy(noise_).clone())
         noise_ = noise_.resize_(batch_size, nz, 1, 1)
         noise.data.copy_(noise_)
 
         c_label.data.resize_(batch_size).copy_(torch.from_numpy(label))
 
         fake = netG(noise)
+        add_background_to_syn_image(fake, syn_image, syn_alpha)
+        """
+        need to add a function to pass the background and syn_obj with alpha
+        """
         s_label.data.fill_(fake_label)
         s_output,c_output = netD(fake.detach())
         s_errD_fake = s_criterion(s_output, s_label)
